@@ -16,6 +16,10 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+/*
+Modified by Chris, K9EQ
+*/
+
 #if !defined(YSFFICH_H)
 #define  YSFFICH_H
 
@@ -35,6 +39,8 @@ public:
 	unsigned char getFN() const;
 	unsigned char getFT() const;
 	unsigned char getDT() const;
+	unsigned char getSQ() const; // K9EQ
+	unsigned char getSC() const; // K9EQ
 
 	void setMR(unsigned char mr);
 	void setVoIP(bool set);
