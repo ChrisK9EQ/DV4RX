@@ -16,6 +16,10 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+ /*
+ Modified by Chris, K9EQ
+ */
+
 #include "YSFConvolution.h"
 #include "YSFDefines.h"
 #include "Golay24128.h"
@@ -104,7 +108,7 @@ bool CYSFFICH::decode(const unsigned char* bytes)
 
 	bool ret = CCRC::checkCCITT162(m_fich, 6U);
 	if (ret)
-		CUtils::dump("FICH bytes", m_fich, 6U);
+//		CUtils::dump("FICH bytes", m_fich, 6U);  // Kill output of FICH Bytes K9EQ
 
 	return ret;
 }
@@ -165,36 +169,55 @@ void CYSFFICH::encode(unsigned char* bytes)
 }
 
 unsigned char CYSFFICH::getFI() const
+// Frame Information (2 bits) K9EQ
+// 00: HC, Header Channel
+// 01: CC, Communication Channel
+// 10: TC, Terminator Channel
+// 11: TS, Test Channel
 {
 	return (m_fich[0U] >> 6) & 0x03U;
 }
 
 unsigned char CYSFFICH::getCM() const
+// Call Mode (2 bits) K9EQ
+// 00: Group/CQ Mode
+// 01: Reserve
+// 10: Reserve
+// 11: Individual Mode
 {
 	return (m_fich[0U] >> 2) & 0x03U;
 }
 
 unsigned char CYSFFICH::getBN() const
+// Block Number (2 bits) K9EQ
 {
 	return m_fich[0U] & 0x03U;
 }
 
 unsigned char CYSFFICH::getBT() const
+// Block Total (2 bits) K9EQ
 {
 	return (m_fich[1U] >> 6) & 0x03U;
 }
 
 unsigned char CYSFFICH::getFN() const
+// Frame Number (3 bits) K9EQ
 {
 	return (m_fich[1U] >> 3) & 0x07U;
 }
 
 unsigned char CYSFFICH::getFT() const
+// Framte Total (3 bits) K9EQ
 {
 	return m_fich[1U] & 0x07U;
 }
 
 unsigned char CYSFFICH::getDT() const
+// Data Type (2 bits) K9EQ
+// 00: VD Type 1
+// 01: DW (FR Data)
+// 10: VD Type 2
+// 11: VW (FR Voice)
 {
 	return m_fich[2U] & 0x03U;
 }
@@ -211,4 +234,18 @@ void CYSFFICH::setVoIP(bool on)
 		m_fich[2U] |= 0x04U;
 	else
 		m_fich[2U] &= 0xFBU;
+}
+
+unsigned char CYSFFICH::getSQ() const // K9EQ
+// SQL (1 bit)
+// 0: Enabled
+// 1: Disabled
+{
+	return (m_fich[3U] >> 7) & 0x1U;
+}
+
+unsigned char CYSFFICH::getSC() const // K9EQ
+// DSQ/DG-ID (7 bits) Suspect SQ and SC are combined for an 8-bit code now 0-99 with DG-ID
+{
+	return m_fich[3U] & 0x7F;
 }
