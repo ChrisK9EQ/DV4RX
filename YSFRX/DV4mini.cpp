@@ -16,6 +16,10 @@
 *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+/*
+Modified by Chris, K9EQ
+*/
+
 #include "DV4mini.h"
 #include "Utils.h"
 #include "Log.h"
@@ -65,6 +69,9 @@ unsigned int CDV4mini::read(unsigned char* data, unsigned int length)
 	unsigned int len = getReply(data, length);
 	if (len == 0U)
 		return 0U;
+	if (len == 9999) {
+		LogMessage("TIMEOUT");
+	}
 
 	return len;
 }
@@ -134,19 +141,24 @@ void CDV4mini::setMode()
 	m_serial.write(buffer, 7U);
 }
 
+#define timeoutLimit 500 // K9EQ
 unsigned int CDV4mini::getReply(unsigned char* data, unsigned int length)
 {
 	data[0U] = 0x00U;
+	unsigned int timeoutTimer = 0;
 
 	while (data[0U] != 0x71U) {
 		unsigned int ret = m_serial.read(data, 1U);
 		if (ret == 0U) {
+			timeoutTimer++;
 #if defined(_WIN32) || defined(_WIN64)
 			::Sleep(5UL);		// 5ms
 #else
 			::usleep(5000);		// 5ms
 #endif
 		}
+		if (timeoutTimer >= timeoutLimit) // K9EQ
+			return (9999);
 	}
 
 	unsigned int offset = 0U;
@@ -154,6 +166,7 @@ unsigned int CDV4mini::getReply(unsigned char* data, unsigned int length)
 	while (offset < 5U) {
 		unsigned int ret = m_serial.read(data + offset + 1U, 5U - offset);
 		if (ret == 0U) {
+			timeoutTimer++;
 #if defined(_WIN32) || defined(_WIN64)
 			::Sleep(5UL);		// 5ms
 #else
@@ -162,6 +175,9 @@ unsigned int CDV4mini::getReply(unsigned char* data, unsigned int length)
 		} else {
 			offset += ret;
 		}
+		if (timeoutTimer >= timeoutLimit) // K9EQ
+			return (9999);
+
 	}
 
 	unsigned int rest = data[5U];
@@ -169,8 +185,9 @@ unsigned int CDV4mini::getReply(unsigned char* data, unsigned int length)
 	offset = 0U;
 
 	while (offset < rest) {
-		unsigned int ret = m_serial.read(data + 6U + offset, rest - offset);
+		unsigned int ret = m_serial.read(data + 6U + offset, rest - offset);  // Dies here waiting for read to complete K9EQ
 		if (ret == 0U) {
+			timeoutTimer++;
 #if defined(_WIN32) || defined(_WIN64)
 			::Sleep(5UL);		// 5ms
 #else
@@ -179,6 +196,8 @@ unsigned int CDV4mini::getReply(unsigned char* data, unsigned int length)
 		} else {
 			offset += ret;
 		}
+		if (timeoutTimer >= timeoutLimit) // K9EQ
+			return (9999);
 	}
 
 	return rest + 5U;
