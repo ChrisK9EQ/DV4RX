@@ -16,9 +16,13 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+/*
+Modified by Chris, K9EQ
+*/
+
 #if !defined(VERSION_H)
 #define	VERSION_H
 
-const char* VERSION = "20160927";
+const char* VERSION = "20181105 K9EQ";
 
 #endif
