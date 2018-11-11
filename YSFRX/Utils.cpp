@@ -24,6 +24,8 @@ void CUtils::dump(const std::string& title, const unsigned char* data, unsigned 
 	dump(2U, title, data, length);
 }
 
+// Generate text output stream
+#define NBytes 24U
 void CUtils::dump(int level, const std::string& title, const unsigned char* data, unsigned int length)
 {
 	assert(data != NULL);
@@ -35,15 +37,16 @@ void CUtils::dump(int level, const std::string& title, const unsigned char* data
 	while (length > 0U) {
 		std::string output;
 
-		unsigned int bytes = (length > 16U) ? 16U : length;
+		// Limit output to N Bytes
+		unsigned int bytes = (length > NBytes) ? NBytes : length;
 
 		for (unsigned i = 0U; i < bytes; i++) {
-			char temp[10U];
+			char temp[20U]; // Was 10U
 			::sprintf(temp, "%02X ", data[offset + i]);
 			output += temp;
 		}
 
-		for (unsigned int i = bytes; i < 16U; i++)
+		for (unsigned int i = bytes; i < NBytes; i++)
 			output += "   ";
 
 		output += "   *";
@@ -63,8 +66,8 @@ void CUtils::dump(int level, const std::string& title, const unsigned char* data
 
 		offset += 16U;
 
-		if (length >= 16U)
-			length -= 16U;
+		if (length >= NBytes)
+			length -= NBytes;
 		else
 			length = 0U;
 	}

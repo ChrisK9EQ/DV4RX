@@ -16,6 +16,10 @@
 *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+/* 
+This program modified by Chris, K9EQ
+*/
+
 #include "YSFRX.h"
 #include "Version.h"
 #include "DV4mini.h"
@@ -37,6 +41,9 @@
 #include <cstring>
 
 const unsigned char BIT_MASK_TABLE[] = { 0x80U, 0x40U, 0x20U, 0x10U, 0x08U, 0x04U, 0x02U, 0x01U };
+char fi_text[4];
+char dt_text[5];
+bool headerTerminator;
 
 #define WRITE_BIT(p,i,b) p[(i)>>3] = (b) ? (p[(i)>>3] | BIT_MASK_TABLE[(i)&7]) : (p[(i)>>3] & ~BIT_MASK_TABLE[(i)&7])
 #define READ_BIT(p,i)    (p[(i)>>3] & BIT_MASK_TABLE[(i)&7])
@@ -130,10 +137,16 @@ void CYSFRX::run()
 
 	LogMessage("YSFRX-%s starting", VERSION);
 
+	// Loop continously looking for DV4 inputs due to Rx signal K9EQ
 	for (;;) {
 		unsigned char buffer[300U];
 		unsigned int len = dv4mini.read(buffer, 300U);
+		if (len == 9999) {
+			// Need to reset DV4 here K9EQ
+			len = 0U; // Fake like we never got anything K9EQ
+		}
 
+		// If we have input, decode it
 		if (len > 0U) {
 			unsigned int length = buffer[5U];
 			decode(buffer + 6U, length);
@@ -196,6 +209,7 @@ void CYSFRX::processBit(bool b)
 
 	CYSFFICH fich;
 	bool valid = fich.decode(m_buffer);
+
 	if (valid) {
 		unsigned char dt = fich.getDT();
 		unsigned char fi = fich.getFI();
@@ -203,64 +217,126 @@ void CYSFRX::processBit(bool b)
 		unsigned char bt = fich.getBT();
 		unsigned char fn = fich.getFN();
 		unsigned char ft = fich.getFT();
+		unsigned char sq = fich.getSQ(); // K9EQ
+		unsigned char sc = fich.getSC(); // K9EQ Add DSQ/DG-ID setting
 
-		LogMessage("FICH: FI: %u, DT: %u, BN: %u, BT: %u, FN: %u, FT: %u", fi, dt, bn, bt, fn, ft);
+// Convert fi to text
+// 00: HC, Header Channel
+// 01: CC, Communication Channel
+// 10: TC, Terminator Channel
+// 11: TS, Test Channel
+		strcpy(fi_text, "XX");
+		switch (fi)
+		{
+		case 0x00:
+			strcpy(fi_text, "HC");
+			break;
+		case 0x01:
+			strcpy(fi_text, "CC");
+			break;
+		case 0x02:
+			strcpy(fi_text, "TC");
+			break;
+		case 0x03:
+			strcpy(fi_text, "TS");
+			break;
+		}
+
+// Convert dt to text
+// 00: VD Type 1
+// 01: DW (FR Data)
+// 10: VD Type 2
+// 11: VW (FR Voice)
+		strcpy(dt_text, "XX");
+		switch (dt)
+		{
+		case 0x00:
+			strcpy(dt_text, "VD1");
+			break;
+		case 0x01:
+			strcpy(dt_text, "DW");
+			break;
+		case 0x02:
+			strcpy(dt_text, "VD2");
+			break;
+		case 0x03:
+			strcpy(dt_text, "VW");
+			break;
+		}
+
+
+		if (fi == YSF_FI_HEADER | fi == YSF_FI_TERMINATOR)
+			headerTerminator = true;
+		else
+			headerTerminator = false;
+
+		headerTerminator = true;
+
+		if (headerTerminator) {
+			// Insert blank line K9EQ	
+			LogMessage("");
+			LogMessage("FICH: FI: %s, DT: %s, BN: %u, BT: %u, FN: %u, FT: %u SQ: %u SC: %u", fi_text, dt_text, bn, bt, fn, ft, sq, sc); // K9EQ
+		}
 
 		CYSFPayload payload;
 
-		switch (fi) {
-		case YSF_FI_HEADER:
-			payload.processHeaderData(m_buffer);
-			break;
+		if (headerTerminator) {
 
-		case YSF_FI_TERMINATOR:
-			payload.processTerminatorData(m_buffer);
-			m_receiving = false;
-			m_count = 0U;
-			break;
+			switch (fi) {
+			case YSF_FI_HEADER:
+				payload.processHeaderData(m_buffer);
+				break;
 
-		case YSF_FI_COMMUNICATIONS:
-			switch (dt) {
-			case YSF_DT_VD_MODE1: {
+			case YSF_FI_TERMINATOR:
+				payload.processTerminatorData(m_buffer);
+				m_receiving = false;
+				m_count = 0U;
+				break;
+
+			case YSF_FI_COMMUNICATIONS:
+				switch (dt) {
+				case YSF_DT_VD_MODE1: {
 					payload.processVDMode1Data(m_buffer, fn);
 					unsigned int errors = payload.processVDMode1Audio(m_buffer);
 					LogMessage("YSF, V/D Mode 1, BER=%.1f%%", float(errors) / 2.35F);
 					if (m_socket != NULL)
 						writeVD1(m_buffer);
 				}
-				break;
+									  break;
 
-			case YSF_DT_VD_MODE2: {
+				case YSF_DT_VD_MODE2: {
 					payload.processVDMode2Data(m_buffer, fn);
 					unsigned int errors = payload.processVDMode2Audio(m_buffer);
 					LogMessage("YSF, V/D Mode 2, BER=%.1f%%", float(errors) / 1.35F);
 					if (m_socket != NULL)
 						writeVD2(m_buffer);
-			    }
-				break;
+				}
+									  break;
 
-			case YSF_DT_DATA_FR_MODE:
-				payload.processDataFRModeData(m_buffer, fn);
-				break;
+				case YSF_DT_DATA_FR_MODE:
+					payload.processDataFRModeData(m_buffer, fn);
+					break;
 
-			case YSF_DT_VOICE_FR_MODE:
-				if (fn == 0U && ft == 1U) {
-					payload.processVoiceFRModeData(m_buffer);
-				} else {
-					unsigned int errors = payload.processVoiceFRModeAudio(m_buffer);
-					LogMessage("YSF, V Mode 3, BER=%.1f%%", float(errors) / 7.2F);
-					if (m_socket != NULL)
-						writeFR(m_buffer);
+				case YSF_DT_VOICE_FR_MODE:
+					if (fn == 0U && ft == 1U) {
+						payload.processVoiceFRModeData(m_buffer);
+					}
+					else {
+						unsigned int errors = payload.processVoiceFRModeAudio(m_buffer);
+						LogMessage("YSF, V Mode 3, BER=%.1f%%", float(errors) / 7.2F);
+						if (m_socket != NULL)
+							writeFR(m_buffer);
+					}
+					break;
+
+				default:
+					break;
 				}
 				break;
 
 			default:
 				break;
 			}
-			break;
-
-		default:
-			break;
 		}
 	}
 
